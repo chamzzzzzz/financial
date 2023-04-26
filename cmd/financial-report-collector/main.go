@@ -2,8 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -39,6 +44,8 @@ type Option struct {
 	SpecifiedYears             []int
 	AnnualReportCheckInterval  int64
 	AnnualReportUpdateInterval int64
+	AnnualReportDownload       bool
+	AnnualReportDownloadDir    string
 	File                       string
 }
 
@@ -86,6 +93,18 @@ func (app *App) Run() error {
 				Usage:       "annual report update interval",
 				Destination: &app.option.AnnualReportUpdateInterval,
 				Value:       100,
+			},
+			&cli.BoolFlag{
+				Name:        "annual-report-download",
+				Usage:       "annual report download",
+				Destination: &app.option.AnnualReportDownload,
+				Value:       false,
+			},
+			&cli.StringFlag{
+				Name:        "annual-report-download-dir",
+				Usage:       "annual report download dir",
+				Destination: &app.option.AnnualReportDownloadDir,
+				Value:       "annualreport",
 			},
 			&cli.StringFlag{
 				Name:        "file",
@@ -203,11 +222,16 @@ func (app *App) updateAnnualReport() error {
 			return err
 		}
 		for _, report := range reports {
+			dup := false
 			for _, v := range stock.AnnualReports {
 				if *v == *report {
 					fmt.Printf("skip stock %s dup annual report %+v\n", stock.Code, report)
-					continue
+					dup = true
+					break
 				}
+			}
+			if dup {
+				continue
 			}
 			stock.AnnualReports = append(stock.AnnualReports, report)
 			fmt.Printf("add stock %s annual report %+v\n", stock.Code, report)
@@ -279,6 +303,60 @@ func (app *App) getAnnualReports(stock *Stock) ([]*AnnualReport, error) {
 	return reports, nil
 }
 
+func (app *App) downloadAnnualReport() error {
+	if !app.option.AnnualReportDownload {
+		return nil
+	}
+
+	for _, stock := range app.database.Stocks {
+		if len(stock.AnnualReports) == 0 {
+			continue
+		}
+
+		for _, report := range stock.AnnualReports {
+			file := filepath.Join(app.option.AnnualReportDownloadDir, stock.Code, report.Title+".pdf")
+			_, err := os.Stat(file)
+			if err == nil {
+				fmt.Printf("report %s already downloaded, skip.\n", file)
+				continue
+			}
+			if !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+
+			err = os.MkdirAll(filepath.Dir(file), 0750)
+			if err != nil && errors.Is(err, fs.ErrExist) {
+				return err
+			}
+
+			err = app.downloadURL(report.URL, file)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("download annual report %s successed\n", file)
+		}
+	}
+	return nil
+}
+
+func (app *App) downloadURL(URL, file string) error {
+	out, err := os.Create(file)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	resp, err := http.Get(URL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status code:%d", resp.StatusCode)
+	}
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
 func (app *App) action(c *cli.Context) error {
 	err := app.loadDatabase()
 	if err != nil {
@@ -296,6 +374,11 @@ func (app *App) action(c *cli.Context) error {
 	}
 
 	err = app.updateAnnualReport()
+	if err != nil {
+		return err
+	}
+
+	err = app.downloadAnnualReport()
 	if err != nil {
 		return err
 	}
