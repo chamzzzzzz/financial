@@ -324,7 +324,7 @@ func (app *App) downloadAnnualReport() error {
 				return err
 			}
 
-			err = os.MkdirAll(filepath.Dir(file), 0750)
+			err = os.MkdirAll(filepath.Dir(file), 0777)
 			if err != nil && errors.Is(err, fs.ErrExist) {
 				return err
 			}
@@ -340,11 +340,6 @@ func (app *App) downloadAnnualReport() error {
 }
 
 func (app *App) downloadURL(URL, file string) error {
-	out, err := os.Create(file)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
 	resp, err := http.Get(URL)
 	if err != nil {
 		return err
@@ -353,8 +348,14 @@ func (app *App) downloadURL(URL, file string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status code:%d", resp.StatusCode)
 	}
-	_, err = io.Copy(out, resp.Body)
-	return err
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if len(b) != int(resp.ContentLength) {
+		return fmt.Errorf("content length not match %d, %d", resp.ContentLength, len(b))
+	}
+	return os.WriteFile(file, b, 0666)
 }
 
 func (app *App) action(c *cli.Context) error {
