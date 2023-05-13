@@ -323,6 +323,10 @@ func (app *App) downloadAnnualReport() error {
 			if !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
+			if !strings.HasSuffix(strings.ToUpper(report.URL), ".PDF") {
+				fmt.Printf("report %s is not pdf, skip.\n", report.URL)
+				continue
+			}
 
 			err = os.MkdirAll(filepath.Dir(file), 0777)
 			if err != nil && errors.Is(err, fs.ErrExist) {
@@ -331,7 +335,12 @@ func (app *App) downloadAnnualReport() error {
 
 			err = app.downloadURL(report.URL, file)
 			if err != nil {
-				return err
+				fmt.Printf("download annual report %s, %s failed: %s\n", report.URL, file, err)
+				if fmt.Sprintf("%s", err) == "status code:404" {
+					continue
+				} else {
+					return err
+				}
 			}
 			fmt.Printf("download annual report %s successed\n", file)
 		}
