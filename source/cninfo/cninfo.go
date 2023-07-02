@@ -64,6 +64,31 @@ type HisAnnouncementQueryResponse struct {
 	Totalpages        int             `json:"totalpages"`
 }
 
+type DividendRecord struct {
+	Period         string `json:"F001V"`
+	Plan           string `json:"F007V"`
+	RecordDate     string `json:"F018D"`
+	ExDividendDate string `json:"F020D"`
+	PayDate        string `json:"F023D"`
+}
+
+type HisDividendResponse struct {
+	Path string `json:"path"`
+	Code any    `json:"code"`
+	Msg  string `json:"msg"`
+	Data struct {
+		Total      int               `json:"total"`
+		Count      int               `json:"count"`
+		ResultMsg  string            `json:"resultMsg"`
+		ResultCode string            `json:"resultCode"`
+		Records    []*DividendRecord `json:"records"`
+	} `json:"data"`
+}
+
+func (r *HisDividendResponse) GetCodeString() string {
+	return fmt.Sprintf("%v", r.Code)
+}
+
 func (q *HisAnnouncementQueryRequest) FormURLEncoded() string {
 	v := *q
 	if v.PageNum == 0 {
@@ -189,4 +214,34 @@ func (s *Source) GetAnnualReportAnnoucements(stock *Stock, start, end time.Time)
 		}
 	}
 	return announcements, nil
+}
+
+func (s *Source) RequestHisDividend(stockCode string) (*HisDividendResponse, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", "http://www.cninfo.com.cn/data20/companyOverview/getCompanyHisDividend?scode="+stockCode, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	p := &HisDividendResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (s *Source) GetDividendRecords(stock *Stock) ([]*DividendRecord, error) {
+	p, err := s.RequestHisDividend(stock.Code)
+	if err != nil {
+		return nil, err
+	}
+	code := p.GetCodeString()
+	if code != "200" {
+		return nil, fmt.Errorf("code: %s, msg: %s", code, p.Msg)
+	}
+	return p.Data.Records, nil
 }
