@@ -185,11 +185,16 @@ func notification(stock *cninfo.Stock, records []*cninfo.DividendRecord) {
 		return
 	}
 
-	auth := smtp.PlainAuth("", user, pass, host)
-	if err := smtp.SendMail(addr, auth, user, []string{user}, buf.Bytes()); err != nil {
-		log.Printf("send notification fail. err='%s'\n", err)
+	for i := 0; i < 3; i++ {
+		auth := smtp.PlainAuth("", user, pass, host)
+		if err := smtp.SendMail(addr, auth, user, []string{user}, buf.Bytes()); err != nil {
+			log.Printf("send notification fail, retry after 10s. err='%s'", err)
+			time.Sleep(time.Second * 10)
+			continue
+		}
+		log.Printf("send notification success.\n")
+		break
 	}
-	log.Printf("send notification success.\n")
 }
 
 func writeStockDividendRecords(stock *cninfo.Stock, records []*cninfo.DividendRecord) error {
