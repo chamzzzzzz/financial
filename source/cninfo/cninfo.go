@@ -148,7 +148,6 @@ func (s *Source) GetStockList() ([]*Stock, error) {
 func (s *Source) RequestHisAnnouncementQuery(q *HisAnnouncementQueryRequest) (*HisAnnouncementQueryResponse, error) {
 	client := &http.Client{}
 	form := q.FormURLEncoded()
-	fmt.Println(form)
 	req, err := http.NewRequest("POST", "http://www.cninfo.com.cn/new/hisAnnouncement/query", bytes.NewBufferString(form))
 	if err != nil {
 		return nil, err
