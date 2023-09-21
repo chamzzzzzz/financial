@@ -21,6 +21,7 @@ var (
 	addr    = os.Getenv("FINANCIAL_DIVIDEND_MONITOR_SMTP_ADDR")
 	user    = os.Getenv("FINANCIAL_DIVIDEND_MONITOR_SMTP_USER")
 	pass    = os.Getenv("FINANCIAL_DIVIDEND_MONITOR_SMTP_PASS")
+	to      = os.Getenv("FINANCIAL_DIVIDEND_MONITOR_SMTP_TO")
 	source  = "From: {{.From}}\r\nTo: {{.To}}\r\nSubject: {{.Subject}}\r\nContent-Type: {{.ContentType}}\r\n\r\n{{.Body}}"
 	tpl     *template.Template
 	stocks  []*cninfo.Stock
@@ -33,6 +34,7 @@ func main() {
 	flag.StringVar(&addr, "addr", addr, "notification smtp addr")
 	flag.StringVar(&user, "user", user, "notification smtp user")
 	flag.StringVar(&pass, "pass", pass, "notification smtp pass")
+	flag.StringVar(&to, "to", to, "notification smtp to")
 	flag.Parse()
 
 	s, err := (&cninfo.Source{}).GetStockList()
@@ -173,7 +175,7 @@ func notification(stock *cninfo.Stock, records []*cninfo.DividendRecord) {
 	}
 	data := Data{
 		From:        fmt.Sprintf("%s <%s>", mime.BEncoding.Encode("UTF-8", "Monitor"), user),
-		To:          user,
+		To:          to,
 		Subject:     mime.BEncoding.Encode("UTF-8", fmt.Sprintf("「FIN」%s", subject)),
 		ContentType: "text/plain; charset=utf-8",
 		Body:        body,
@@ -189,7 +191,7 @@ func notification(stock *cninfo.Stock, records []*cninfo.DividendRecord) {
 
 	for i := 0; i < 3; i++ {
 		auth := smtp.PlainAuth("", user, pass, host)
-		if err := smtp.SendMail(addr, auth, user, []string{user}, buf.Bytes()); err != nil {
+		if err := smtp.SendMail(addr, auth, user, strings.Split(to, ","), buf.Bytes()); err != nil {
 			log.Printf("send notification fail, retry after 10s. err='%s'", err)
 			time.Sleep(time.Second * 10)
 			continue
